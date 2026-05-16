@@ -45,27 +45,83 @@ function clean(s) {
 }
 
 function getMockListingUrls() {
-  // Mock data for testing while real scraper is blocked
+  // Generate mock listing URLs starting from 35352930, ~50 listings
   console.log(`[MOCK] Returning mock listing URLs`);
-  return [
-    "https://ingatlan.com/35352926",
-    "https://ingatlan.com/35352927",
-    "https://ingatlan.com/35352928",
-    "https://ingatlan.com/35352929",
-    "https://ingatlan.com/35352930",
-  ];
+  const baseId = 35352930;
+  const count = 50; // Generate 50 mock listings
+  const urls = [];
+  for (let i = 0; i < count; i++) {
+    urls.push(`https://ingatlan.com/${baseId - i}`);
+  }
+  return urls;
+}
+
+// Helper to generate mock data based on ID
+function generateMockListing(id) {
+  const districts = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX", "XXI", "XXII", "XXIII"];
+  const types = ["lakas", "haz"];
+  const conditions = ["jó", "újszerű", "felújított", "igényli a felújítást"];
+  const elevators = ["van", "nincs"];
+  const orientations = ["északi", "déli", "keleti", "nyugati", "északkeleti", "délkeleti", "délnyugati", "északnyugati"];
+  
+  // Use ID as seed for deterministic randomization
+  const hash = (id * 9973) % 10000;
+  const seed = (id * 12347) % 10000;
+  
+  const type = types[hash % types.length];
+  const isApt = type === "lakas";
+  const district = districts[seed % districts.length];
+  
+  const basePrices = isApt ? [75000000, 95000000, 110000000, 120000000, 140000000, 160000000] : [180000000, 220000000, 280000000, 350000000];
+  const priceIdx = (id % basePrices.length);
+  const price = basePrices[priceIdx] + (seed * 1000000) % 30000000;
+  
+  const area = isApt ? 50 + (seed % 100) : 120 + (seed % 200);
+  const rooms = isApt ? ((seed % 3) + 1).toString() + " szoba" : ((seed % 4) + 4).toString() + " szoba";
+  const floor = (seed % 6) + 1;
+  const buildingFloors = floor + (seed % 4) + 1;
+  const buildYear = 1950 + (seed % 75);
+  
+  const title = `Eladó ${type === "lakas" ? "lakás" : "ház"} ${district}. ker. Budapest`;
+  const location = `Budapest ${district}. kerület`;
+  
+  return {
+    listing_id: id,
+    title,
+    listing_type: type,
+    location_text: location,
+    district,
+    price_text: `${Math.floor(price / 1000000)} millió Ft`,
+    price_ft: price,
+    area_m2: area,
+    rooms_text: rooms,
+    condition_text: conditions[seed % conditions.length],
+    comfort: "komfort",
+    floor: floor.toString(),
+    building_floors: buildingFloors,
+    elevator: buildingFloors > 3 ? elevators[seed % elevators.length] : "nincs",
+    source_url: `https://ingatlan.com/${id}`,
+    ad_category: `eladó ${type}`,
+    build_year: buildYear,
+    accessible: null,
+    bath_wc: isApt ? null : (seed % 2 === 0 ? "1" : "2"),
+    orientation: orientations[seed % orientations.length],
+    view_text: seed % 3 === 0 ? "parkra nézőtől" : null,
+    balcony_m2: isApt && seed % 2 === 0 ? 6 + (seed % 12) : null,
+    garden_contact: isApt ? null : (seed % 2 === 0 ? "igen" : null),
+    attic: isApt ? null : (seed % 2 === 0 ? "van" : null),
+    parking: seed % 2 === 0 ? "közös parkoló" : "parkoló lehetséges",
+    parking_price_text: null,
+    parking_price_ft: null,
+    ceiling_height: "2." + (7 + (seed % 3)).toString(),
+    air_conditioning: seed % 3 === 0 ? "van" : "nincs",
+    raw_json: {},
+  };
 }
 
 function getMockListing(id) {
-  // Mock listing data for testing
-  const mockListings = {
-    35352926: { listing_id: 35352926, title: "Eladó lakás I. ker. Budapest", listing_type: "lakas", location_text: "Budapest I. kerület", district: "I", price_text: "120 millió Ft", price_ft: 120000000, area_m2: 85.5, rooms_text: "3 szoba", condition_text: "jó", comfort: "komfort", floor: "2", building_floors: 4, elevator: "van", source_url: "https://ingatlan.com/35352926", ad_category: "eladó lakás", build_year: 1985, accessible: null, bath_wc: null, orientation: "délkeleti", view_text: null, balcony_m2: null, garden_contact: null, attic: null, parking: "közös udvar", parking_price_text: null, parking_price_ft: null, ceiling_height: "2.8", air_conditioning: "van", raw_json: {} },
-    35352927: { listing_id: 35352927, title: "Eladó ház V. ker. Budapest", listing_type: "haz", location_text: "Budapest V. kerület", district: "V", price_text: "250 millió Ft", price_ft: 250000000, area_m2: 180, rooms_text: "6 szoba", condition_text: "felújított", comfort: "komfort", floor: "1", building_floors: 3, elevator: "van", source_url: "https://ingatlan.com/35352927", ad_category: "eladó ház", build_year: 1950, accessible: null, bath_wc: "2", orientation: "északkeleti", view_text: "kertre nézőtől", balcony_m2: null, garden_contact: "igen", attic: "van", parking: "2 parkoló", parking_price_text: null, parking_price_ft: null, ceiling_height: "3.2", air_conditioning: null, raw_json: {} },
-    35352928: { listing_id: 35352928, title: "Eladó lakás VII. ker. Budapest", listing_type: "lakas", location_text: "Budapest VII. kerület", district: "VII", price_text: "95 millió Ft", price_ft: 95000000, area_m2: 65, rooms_text: "2 szoba", condition_text: "újszerű", comfort: "komfort", floor: "3", building_floors: 5, elevator: "van", source_url: "https://ingatlan.com/35352928", ad_category: "eladó lakás", build_year: 2015, accessible: null, bath_wc: null, orientation: "nyugati", view_text: null, balcony_m2: 8, garden_contact: null, attic: null, parking: "parkoló lehetséges", parking_price_text: null, parking_price_ft: null, ceiling_height: "2.9", air_conditioning: "van", raw_json: {} },
-    35352929: { listing_id: 35352929, title: "Eladó lakás XIII. ker. Budapest", listing_type: "lakas", location_text: "Budapest XIII. kerület", district: "XIII", price_text: "110 millió Ft", price_ft: 110000000, area_m2: 72, rooms_text: "3 szoba", condition_text: "jó", comfort: "komfort", floor: "2", building_floors: 7, elevator: "van", source_url: "https://ingatlan.com/35352929", ad_category: "eladó lakás", build_year: 1995, accessible: null, bath_wc: null, orientation: "déli", view_text: "Duna-part közel", balcony_m2: 6, garden_contact: null, attic: null, parking: "közös parkoló", parking_price_text: "800 Ft/hó", parking_price_ft: null, ceiling_height: "2.7", air_conditioning: "nincs", raw_json: {} },
-    35352930: { listing_id: 35352930, title: "Eladó ház XI. ker. Budapest", listing_type: "haz", location_text: "Budapest XI. kerület", district: "XI", price_text: "180 millió Ft", price_ft: 180000000, area_m2: 150, rooms_text: "5 szoba", condition_text: "felújított", comfort: "komfort", floor: "1", building_floors: 2, elevator: "nincs", source_url: "https://ingatlan.com/35352930", ad_category: "eladó ház", build_year: 1980, accessible: null, bath_wc: "2", orientation: "keleti", view_text: null, balcony_m2: null, garden_contact: "igen", attic: "van", parking: "4 parkoló", parking_price_text: null, parking_price_ft: null, ceiling_height: "3", air_conditioning: null, raw_json: {} },
-  };
-  return mockListings[id] || null;
+  // Generate mock listing data dynamically from ID
+  return generateMockListing(id);
 }
 
 async function fetchTextWithBrowser(url) {
