@@ -44,6 +44,16 @@ function clean(s) {
   return String(s || "").replace(/\s+/g, " ").trim();
 }
 
+function isBotChallengeHtml(html) {
+  const s = String(html || "").toLowerCase();
+  return (
+    s.includes("csak egy gyors ellen\u0151rz\u00e9s") ||
+    s.includes("just a quick check") ||
+    s.includes("cloudflare") ||
+    s.includes("captcha")
+  );
+}
+
 function fetchText(url, redirectLeft = 5) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
@@ -117,6 +127,10 @@ export async function collectListingUrls({ maxPagesPerType = 10 } = {}) {
       } catch (err) {
         // stop this source on hard fetch issue; keep other source running
         break;
+      }
+
+      if (isBotChallengeHtml(html)) {
+        throw new Error(`Source anti-bot challenge detected at ${pageUrl}`);
       }
 
       const $ = cheerioLoad(html);
@@ -295,6 +309,9 @@ export async function scrapeBatch({
   logger = console,
 } = {}) {
   const urls = await collectListingUrls({ maxPagesPerType });
+  if (urls.length === 0) {
+    throw new Error("No listing URLs collected; source is likely blocking automated requests.");
+  }
   const picked = urls.slice(0, maxDetails);
   const records = [];
 
