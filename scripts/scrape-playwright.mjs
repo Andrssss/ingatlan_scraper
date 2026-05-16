@@ -70,40 +70,6 @@ async function gotoWithChallenge(page, url, { tries = 4, maxWaitMs = 25000 } = {
   throw new Error(`Cloudflare challenge not solved for ${url}`);
 }
 
-async function newStealthContext(browser) {
-  const context = await browser.newContext({
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-      "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    locale: "hu-HU",
-    timezoneId: "Europe/Budapest",
-    viewport: { width: 1366, height: 850 },
-    extraHTTPHeaders: {
-      "Accept-Language": "hu-HU,hu;q=0.9,en;q=0.8",
-    },
-  });
-  // Minimal stealth: hide webdriver, fake chrome runtime, plugins, languages
-  await context.addInitScript(() => {
-    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
-    Object.defineProperty(navigator, "languages", {
-      get: () => ["hu-HU", "hu", "en"],
-    });
-    Object.defineProperty(navigator, "plugins", {
-      get: () => [1, 2, 3, 4, 5],
-    });
-    // eslint-disable-next-line no-undef
-    window.chrome = { runtime: {} };
-    const origQuery = navigator.permissions?.query?.bind(navigator.permissions);
-    if (origQuery) {
-      navigator.permissions.query = (p) =>
-        p && p.name === "notifications"
-          ? Promise.resolve({ state: Notification.permission })
-          : origQuery(p);
-    }
-  });
-  return context;
-}
-
 async function collectUrls(page) {
   const all = new Set();
   for (const base of LIST_URLS) {
@@ -140,16 +106,20 @@ async function main() {
   console.log(
     `[INIT] headless=${HEADLESS} maxPages=${MAX_PAGES} maxDetails=${MAX_DETAILS}`
   );
-  const browser = await chromium.launch({
+  // Patchright recommendations:
+  //  - use launchPersistentContext (real user-data dir)
+  //  - do NOT pass --disable-blink-features=AutomationControlled (detection signal)
+  //  - avoid heavy manual fingerprint overrides (patchright handles them)
+  const userDataDir = process.env.PATCHRIGHT_USER_DATA_DIR || "./.pw-user";
+  const context = await chromium.launchPersistentContext(userDataDir, {
     headless: HEADLESS,
-    args: [
-      "--disable-blink-features=AutomationControlled",
-      "--no-sandbox",
-      "--disable-dev-shm-usage",
-    ],
+    channel: process.env.PATCHRIGHT_CHANNEL || undefined, // e.g. "chrome" if available
+    viewport: null,
+    locale: "hu-HU",
+    timezoneId: "Europe/Budapest",
+    args: ["--no-sandbox", "--disable-dev-shm-usage"],
   });
-  const context = await newStealthContext(browser);
-  const page = await context.newPage();
+  const page = context.pages()[0] || (await context.newPage());
 
   let records = [];
   try {
@@ -175,7 +145,7 @@ async function main() {
       await jitter();
     }
   } finally {
-    await browser.close();
+    await context.close();
   }
 
   console.log(`[DB] upserting ${records.length} records`);
