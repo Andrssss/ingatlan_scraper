@@ -1,7 +1,7 @@
 import { withClient } from "./_db.mjs";
 import { scrapeBatch } from "./_scrape_core.mjs";
 
-async function upsertListing(client, rec) {
+export async function upsertListing(client, rec) {
   await client.query(
     `INSERT INTO ingatlan_listings (
       source_url, listing_id, title, listing_type, location_text, district,

@@ -29,8 +29,14 @@ function jitter(minMs = 1200, maxMs = 4200) {
 }
 
 export function parseHirdetesId(url) {
-  const m = String(url).match(/ingatlan\.com\/(\d+)/i);
-  return m ? Number(m[1]) : null;
+  const s = String(url || "");
+  // Absolute: https://ingatlan.com/12345678
+  let m = s.match(/ingatlan\.com\/(\d{6,})/i);
+  if (m) return Number(m[1]);
+  // Relative: /12345678 or /12345678?... or /12345678#...
+  m = s.match(/^\/?(\d{6,})(?:[/?#]|$)/);
+  if (m) return Number(m[1]);
+  return null;
 }
 
 function toAbsUrl(href) {
@@ -113,6 +119,21 @@ function fetchText(url, redirectLeft = 5) {
     req.on("error", reject);
     req.end();
   });
+}
+
+export function parseListHtml(html) {
+  const $ = cheerioLoad(html);
+  const urls = [];
+  $("a[href*='/']").each((_, el) => {
+    const href = $(el).attr("href");
+    if (!href) return;
+    const id = parseHirdetesId(href);
+    if (id) {
+      const absUrl = toAbsUrl(href);
+      if (!urls.includes(absUrl)) urls.push(absUrl);
+    }
+  });
+  return urls;
 }
 
 export async function collectListingUrls({ maxPagesPerType = 10 } = {}) {
@@ -245,13 +266,14 @@ function extractDistrict(locationText) {
   return null;
 }
 
-export async function scrapeListing(url) {
+export function parseDetailHtml(html, url) {
   const id = parseHirdetesId(url);
   if (!id) throw new Error(`Cannot extract ID from ${url}`);
-
-  console.log(`[SCRAPE] Fetching ${url}`);
-  const html = await fetchText(url);
   const $ = cheerioLoad(html);
+  return buildRecordFromCheerio($, id, url);
+}
+
+function buildRecordFromCheerio($, id, url) {
 
   // Extract title
   const title = clean($("h1").first().text() || $("title").text());
@@ -329,6 +351,12 @@ export async function scrapeListing(url) {
   };
 
   return record;
+}
+
+export async function scrapeListing(url) {
+  console.log(`[SCRAPE] Fetching ${url}`);
+  const html = await fetchText(url);
+  return parseDetailHtml(html, url);
 }
 
 export async function scrapeBatch({
