@@ -1,6 +1,7 @@
 import https from "https";
 import http from "http";
 import zlib from "zlib";
+import { chromium } from "playwright";
 import { load as cheerioLoad } from "cheerio";
 
 const LIST_URLS = [
@@ -43,6 +44,32 @@ function toAbsUrl(href) {
 function clean(s) {
   return String(s || "").replace(/\s+/g, " ").trim();
 }
+
+async function fetchTextWithBrowser(url) {
+  let browser;
+  try {
+    console.log(`[BROWSER] Starting Chromium for: ${url.substring(0, 60)}...`);
+    browser = await chromium.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+    const page = await browser.newPage();
+    page.setDefaultTimeout(30000);
+    page.setDefaultNavigationTimeout(30000);
+    
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    const html = await page.content();
+    console.log(`[BROWSER] Page loaded, content: ${html.length} bytes`);
+    
+    await browser.close();
+    return html;
+  } catch (err) {
+    if (browser) await browser.close().catch(() => {});
+    console.error(`[BROWSER] Failed: ${err.message}`);
+    throw new Error(`Browser fetch failed: ${err.message}`);
+  }
+}
+
 
 function isBotChallengeHtml(html) {
   const s = String(html || "").toLowerCase();
@@ -125,8 +152,8 @@ export async function collectListingUrls({ maxPagesPerType = 10 } = {}) {
       const pageUrl = page === 1 ? baseUrl : `${baseUrl}?page=${page}`;
       let html;
       try {
-        console.log(`[URLS] Page ${page}: fetching...`);
-        html = await fetchText(pageUrl);
+        console.log(`[URLS] Page ${page}: fetching with browser...`);
+        html = await fetchTextWithBrowser(pageUrl);
         console.log(`[URLS] Page ${page}: OK (${html.length} bytes)`);
       } catch (err) {
         console.error(`[URLS] Page ${page} fetch failed: ${err.message}`);
@@ -245,7 +272,7 @@ function extractDistrict(locationText) {
 }
 
 export async function scrapeListing(url) {
-  const html = await fetchText(url);
+  const html = await fetchTextWithBrowser(url);
   const $ = cheerioLoad(html);
 
   const id = parseHirdetesId(url);
