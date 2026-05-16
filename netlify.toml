@@ -17,3 +17,7 @@
   from = "/api/scrape-now"
   to = "/.netlify/functions/scrape_now"
   status = 200
+
+[functions]
+  external_node_modules = ["chromium-bidi"]
+
