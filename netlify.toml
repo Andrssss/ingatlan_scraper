@@ -1,0 +1,14 @@
+[build]
+  command = ""
+  publish = "web"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/listings"
+  to = "/.netlify/functions/get_listings"
+  status = 200
+
+[[redirects]]
+  from = "/api/scrape-now"
+  to = "/.netlify/functions/scrape_now"
+  status = 200

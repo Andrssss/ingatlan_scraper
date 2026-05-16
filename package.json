@@ -1,0 +1,17 @@
+{
+  "name": "ingatlan-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "netlify dev",
+    "scrape:once": "node scripts/run-once.mjs"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.37.2"
+  }
+}

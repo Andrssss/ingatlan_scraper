@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ingatlan Tracker</title>
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --card: #ffffff;
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --accent: #0f766e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+    }
+    p.sub {
+      margin: 0 0 20px;
+      color: var(--muted);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .filters label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin: 10px 0 4px;
+    }
+    input, select, button {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 14px;
+      background: #fff;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    button {
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      margin-top: 12px;
+    }
+    #meta {
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+    .item {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+      background: #fff;
+    }
+    .item h3 {
+      margin: 0 0 8px;
+      font-size: 18px;
+    }
+    .item a {
+      color: #0b57d0;
+      text-decoration: none;
+    }
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .tag {
+      font-size: 12px;
+      background: #f3f4f6;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 3px 8px;
+    }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Ingatlan Tracker</h1>
+    <p class="sub">Napi mentés ingatlan.com-ról. Rendezés frissesség szerint (nagyobb azonosító = frissebb).</p>
+
+    <div class="grid">
+      <div class="card filters">
+        <label>Típus</label>
+        <select id="listing_type">
+          <option value="">Mindegy</option>
+          <option value="lakas">Lakás</option>
+          <option value="haz">Ház</option>
+        </select>
+
+        <label>Kerület (roman: I, II...)</label>
+        <input id="district" placeholder="pl. XIII" />
+
+        <div class="row">
+          <div>
+            <label>Min ár (Ft)</label>
+            <input id="min_price" type="number" placeholder="50000000" />
+          </div>
+          <div>
+            <label>Max ár (Ft)</label>
+            <input id="max_price" type="number" placeholder="200000000" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>Min alapterület (m2)</label>
+            <input id="min_area" type="number" placeholder="40" />
+          </div>
+          <div>
+            <label>Max alapterület (m2)</label>
+            <input id="max_area" type="number" placeholder="120" />
+          </div>
+        </div>
+
+        <label>Állapot tartalmazza</label>
+        <input id="condition" placeholder="új építésű" />
+
+        <label>Keresés (cím, lokáció, parkolás)</label>
+        <input id="search" placeholder="pl. teremgarázs" />
+
+        <label>
+          <input type="checkbox" id="has_lift" style="width:auto; margin-right:8px;" />
+          Lift legyen
+        </label>
+
+        <button id="applyBtn">Szűrés</button>
+      </div>
+
+      <div class="card">
+        <div id="meta">Betöltés...</div>
+        <div id="list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function qs(id) { return document.getElementById(id); }
+
+    async function load() {
+      const p = new URLSearchParams();
+      ["listing_type", "district", "min_price", "max_price", "min_area", "max_area", "condition", "search"].forEach((k) => {
+        const v = qs(k).value.trim();
+        if (v) p.set(k, v);
+      });
+      if (qs("has_lift").checked) p.set("has_lift", "1");
+      p.set("limit", "100");
+
+      const res = await fetch(`/api/listings?${p.toString()}`);
+      const data = await res.json();
+      const list = qs("list");
+      list.innerHTML = "";
+
+      if (!data.ok) {
+        qs("meta").textContent = "Hiba: " + (data.error || "ismeretlen");
+        return;
+      }
+
+      qs("meta").textContent = `${data.count} találat`;
+      for (const x of data.items) {
+        const div = document.createElement("div");
+        div.className = "item";
+        div.innerHTML = `
+          <h3><a href="${x.source_url}" target="_blank" rel="noopener">${x.title || x.source_url}</a></h3>
+          <div><b>Ár:</b> ${x.price_text || "-"} (${x.price_ft || "-"} Ft)</div>
+          <div><b>Alapterület:</b> ${x.area_m2 ?? "-"} m2 | <b>Telek:</b> ${x.lot_m2 ?? "-"} m2 | <b>Szobák:</b> ${x.rooms_text || "-"}</div>
+          <div><b>Lokáció:</b> ${x.location_text || "-"} | <b>Kerület:</b> ${x.district || "-"}</div>
+          <div class="tags">
+            <span class="tag">ID: ${x.listing_id}</span>
+            <span class="tag">Típus: ${x.listing_type || "-"}</span>
+            <span class="tag">Állapot: ${x.condition_text || "-"}</span>
+            <span class="tag">Építés: ${x.build_year || "-"}</span>
+            <span class="tag">Komfort: ${x.comfort || "-"}</span>
+            <span class="tag">Emelet: ${x.floor || "-"}</span>
+            <span class="tag">Szintek: ${x.building_floors || "-"}</span>
+            <span class="tag">Lift: ${x.elevator || "-"}</span>
+            <span class="tag">Klíma: ${x.air_conditioning || "-"}</span>
+            <span class="tag">Erkély: ${x.balcony_m2 ?? "-"} m2</span>
+            <span class="tag">Parkolás: ${x.parking || "-"}</span>
+            <span class="tag">Parkoló ár: ${x.parking_price_text || "-"}</span>
+          </div>
+        `;
+        list.appendChild(div);
+      }
+    }
+
+    qs("applyBtn").addEventListener("click", load);
+    load();
+  </script>
+</body>
+</html>
