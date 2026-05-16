@@ -69,24 +69,40 @@ async function runScrape() {
   const maxPagesPerType = Number(process.env.SCRAPE_MAX_PAGES_PER_TYPE || 20);
   const maxDetails = Number(process.env.SCRAPE_MAX_DETAILS || 500);
 
-  const records = await scrapeBatch({
-    maxPagesPerType,
-    maxDetails,
-    minDelayMs: Number(process.env.SCRAPE_MIN_DELAY_MS || 1800),
-    maxDelayMs: Number(process.env.SCRAPE_MAX_DELAY_MS || 6500),
-  });
+  console.log(`[SCRAPE] Starting batch. maxPages=${maxPagesPerType}, maxDetails=${maxDetails}`);
+
+  let records = [];
+  try {
+    records = await scrapeBatch({
+      maxPagesPerType,
+      maxDetails,
+      minDelayMs: Number(process.env.SCRAPE_MIN_DELAY_MS || 1800),
+      maxDelayMs: Number(process.env.SCRAPE_MAX_DELAY_MS || 6500),
+    });
+    console.log(`[SCRAPE] Batch complete. Collected ${records.length} records.`);
+  } catch (err) {
+    console.error(`[SCRAPE] Batch failed: ${err.message}`);
+    throw err;
+  }
 
   let saved = 0;
-  await withClient(async (client) => {
-    for (const rec of records) {
-      try {
-        await upsertListing(client, rec);
-        saved += 1;
-      } catch (err) {
-        console.warn(`upsert failed for ${rec.source_url}: ${err.message}`);
+  console.log(`[DB] Starting upsert of ${records.length} records.`);
+  try {
+    await withClient(async (client) => {
+      for (const rec of records) {
+        try {
+          await upsertListing(client, rec);
+          saved += 1;
+        } catch (err) {
+          console.warn(`[DB] upsert failed for ${rec.source_url}: ${err.message}`);
+        }
       }
-    }
-  });
+    });
+    console.log(`[DB] Upsert complete. Saved ${saved}/${records.length}.`);
+  } catch (err) {
+    console.error(`[DB] Database connection or query failed: ${err.message}`);
+    throw err;
+  }
 
   return { scanned: records.length, saved };
 }

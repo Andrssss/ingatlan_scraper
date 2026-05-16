@@ -117,19 +117,24 @@ function fetchText(url, redirectLeft = 5) {
 
 export async function collectListingUrls({ maxPagesPerType = 10 } = {}) {
   const out = [];
+  console.log(`[URLS] Starting URL collection. maxPages=${maxPagesPerType}, sources=${LIST_URLS.length}`);
 
   for (const baseUrl of LIST_URLS) {
+    console.log(`[URLS] Fetching from source: ${baseUrl.substring(0, 80)}...`);
     for (let page = 1; page <= maxPagesPerType; page++) {
       const pageUrl = page === 1 ? baseUrl : `${baseUrl}?page=${page}`;
       let html;
       try {
+        console.log(`[URLS] Page ${page}: fetching...`);
         html = await fetchText(pageUrl);
+        console.log(`[URLS] Page ${page}: OK (${html.length} bytes)`);
       } catch (err) {
-        // stop this source on hard fetch issue; keep other source running
+        console.error(`[URLS] Page ${page} fetch failed: ${err.message}`);
         break;
       }
 
       if (isBotChallengeHtml(html)) {
+        console.error(`[URLS] Page ${page}: Anti-bot challenge detected!`);
         throw new Error(`Source anti-bot challenge detected at ${pageUrl}`);
       }
 
@@ -144,7 +149,7 @@ export async function collectListingUrls({ maxPagesPerType = 10 } = {}) {
       });
 
       const pageUrls = [...links];
-      if (pageUrls.length === 0) break;
+      console.log(`[URLS] Page ${page}: Found ${pageUrls.length} unique listing IDs`);
 
       out.push(...pageUrls);
       await jitter(1200, 3200);
@@ -312,6 +317,7 @@ export async function scrapeBatch({
   if (urls.length === 0) {
     throw new Error("No listing URLs collected; source is likely blocking automated requests.");
   }
+  console.log(`[URLS] Collection complete. Total ${urls.length} URLs collected from ${LIST_URLS.length} sources.`);
   const picked = urls.slice(0, maxDetails);
   const records = [];
 
