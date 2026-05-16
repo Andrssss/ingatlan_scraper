@@ -10,7 +10,7 @@
 //   SCRAPE_MAX_DELAY_MS       (default 4500)
 //   SCRAPE_HEADLESS           (default "true")
 
-import { chromium } from "playwright";
+import { chromium } from "patchright";
 import { withClient } from "../netlify/functions/_db.mjs";
 import { upsertListing } from "../netlify/functions/scrape_daily.mjs";
 import {
