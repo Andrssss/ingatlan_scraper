@@ -9,7 +9,8 @@
   "scripts": {
     "start": "netlify dev",
     "scrape:once": "node scripts/run-once.mjs",
-    "scrape:playwright": "node scripts/scrape-playwright.mjs"
+    "scrape:playwright": "node scripts/scrape-playwright.mjs",
+    "scrape:incremental": "node scripts/scrape-incremental.mjs"
   },
   "dependencies": {
     "cheerio": "1.0.0-rc.12",

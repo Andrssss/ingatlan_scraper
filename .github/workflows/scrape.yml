@@ -1,19 +1,23 @@
 name: Scrape ingatlan.com
 
 on:
-  schedule:
-    # Naponta 03:15 UTC (~05:15 CEST). GitHub cron lehet kicsit késik.
-    - cron: "15 3 * * *"
+  # Cron disabled until SCRAPINGBEE_API_KEY secret is set in repo settings.
+  # schedule:
+  #   - cron: "0 5 * * *"
   workflow_dispatch:
     inputs:
-      max_pages:
-        description: "Listapages per type"
+      max_new:
+        description: "Max new listings to detail-fetch"
         required: false
-        default: "10"
-      max_details:
-        description: "Max detail pages to scrape"
+        default: "30"
+      max_list_pages:
+        description: "Max list pages per source"
         required: false
-        default: "200"
+        default: "3"
+      stealth:
+        description: "Use stealth proxy (75 cr/req). false = premium (10 cr/req)"
+        required: false
+        default: "true"
 
 concurrency:
   group: scrape-ingatlan
@@ -22,7 +26,7 @@ concurrency:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     permissions:
       contents: read
 
@@ -38,18 +42,12 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Install Playwright + Patchright Chromium
-        run: |
-          npx playwright install --with-deps chromium
-          npx patchright install chromium
-
-      - name: Run scraper
+      - name: Run incremental scraper
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NETLIFY_DATABASE_URL: ${{ secrets.NETLIFY_DATABASE_URL }}
-          SCRAPE_MAX_PAGES_PER_TYPE: ${{ github.event.inputs.max_pages || '10' }}
-          SCRAPE_MAX_DETAILS: ${{ github.event.inputs.max_details || '200' }}
-          SCRAPE_MIN_DELAY_MS: "1500"
-          SCRAPE_MAX_DELAY_MS: "4500"
-          SCRAPE_HEADLESS: "true"
-        run: node scripts/scrape-playwright.mjs
+          SCRAPINGBEE_API_KEY: ${{ secrets.SCRAPINGBEE_API_KEY }}
+          SCRAPINGBEE_STEALTH: ${{ github.event.inputs.stealth || 'true' }}
+          SCRAPE_MAX_NEW: ${{ github.event.inputs.max_new || '30' }}
+          SCRAPE_MAX_LIST_PAGES: ${{ github.event.inputs.max_list_pages || '3' }}
+        run: node scripts/scrape-incremental.mjs

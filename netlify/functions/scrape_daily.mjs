@@ -107,9 +107,8 @@ async function runScrape() {
   return { scanned: records.length, saved };
 }
 
-export const config = {
-  schedule: "0 3 * * *",
-};
+// Netlify scheduled cron disabled - scraping moved to GitHub Actions + ScrapingBee
+// export const config = { schedule: "0 3 * * *" };
 
 export default async () => {
   try {
