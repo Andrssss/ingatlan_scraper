@@ -44,91 +44,6 @@ function clean(s) {
   return String(s || "").replace(/\s+/g, " ").trim();
 }
 
-function getMockListingUrls() {
-  // Generate mock listing URLs starting from 35352930, ~50 listings
-  console.log(`[MOCK] Returning mock listing URLs`);
-  const baseId = 35352930;
-  const count = 50; // Generate 50 mock listings
-  const urls = [];
-  for (let i = 0; i < count; i++) {
-    urls.push(`https://ingatlan.com/${baseId - i}`);
-  }
-  return urls;
-}
-
-// Helper to generate mock data based on ID
-function generateMockListing(id) {
-  const districts = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX", "XXI", "XXII", "XXIII"];
-  const types = ["lakas", "haz"];
-  const conditions = ["jó", "újszerű", "felújított", "igényli a felújítást"];
-  const elevators = ["van", "nincs"];
-  const orientations = ["északi", "déli", "keleti", "nyugati", "északkeleti", "délkeleti", "délnyugati", "északnyugati"];
-  
-  // Use ID as seed for deterministic randomization
-  const hash = (id * 9973) % 10000;
-  const seed = (id * 12347) % 10000;
-  
-  const type = types[hash % types.length];
-  const isApt = type === "lakas";
-  const district = districts[seed % districts.length];
-  
-  const basePrices = isApt ? [75000000, 95000000, 110000000, 120000000, 140000000, 160000000] : [180000000, 220000000, 280000000, 350000000];
-  const priceIdx = (id % basePrices.length);
-  const price = basePrices[priceIdx] + (seed * 1000000) % 30000000;
-  
-  const area = isApt ? 50 + (seed % 100) : 120 + (seed % 200);
-  const rooms = isApt ? ((seed % 3) + 1).toString() + " szoba" : ((seed % 4) + 4).toString() + " szoba";
-  const floor = (seed % 6) + 1;
-  const buildingFloors = floor + (seed % 4) + 1;
-  const buildYear = 1950 + (seed % 75);
-  
-  const title = `Eladó ${type === "lakas" ? "lakás" : "ház"} ${district}. ker. Budapest`;
-  const location = `Budapest ${district}. kerület`;
-  
-  return {
-    listing_id: id,
-    title,
-    listing_type: type,
-    location_text: location,
-    district,
-    price_text: `${Math.floor(price / 1000000)} millió Ft`,
-    price_ft: price,
-    area_m2: area,
-    rooms_text: rooms,
-    condition_text: conditions[seed % conditions.length],
-    comfort: "komfort",
-    floor: floor.toString(),
-    building_floors: buildingFloors,
-    elevator: buildingFloors > 3 ? elevators[seed % elevators.length] : "nincs",
-    source_url: `https://ingatlan.com/${id}`,
-    ad_category: `eladó ${type}`,
-    build_year: buildYear,
-    accessible: null,
-    bath_wc: isApt ? null : (seed % 2 === 0 ? "1" : "2"),
-    orientation: orientations[seed % orientations.length],
-    view_text: seed % 3 === 0 ? "parkra nézőtől" : null,
-    balcony_m2: isApt && seed % 2 === 0 ? 6 + (seed % 12) : null,
-    garden_contact: isApt ? null : (seed % 2 === 0 ? "igen" : null),
-    attic: isApt ? null : (seed % 2 === 0 ? "van" : null),
-    parking: seed % 2 === 0 ? "közös parkoló" : "parkoló lehetséges",
-    parking_price_text: null,
-    parking_price_ft: null,
-    ceiling_height: "2." + (7 + (seed % 3)).toString(),
-    air_conditioning: seed % 3 === 0 ? "van" : "nincs",
-    raw_json: {},
-  };
-}
-
-function getMockListing(id) {
-  // Generate mock listing data dynamically from ID
-  return generateMockListing(id);
-}
-
-async function fetchTextWithBrowser(url) {
-  throw new Error("Browser fetching not supported in Lambda. Using mock data instead.");
-}
-
-
 function isBotChallengeHtml(html) {
   const s = String(html || "").toLowerCase();
   return (
@@ -202,14 +117,49 @@ function fetchText(url, redirectLeft = 5) {
 
 export async function collectListingUrls({ maxPagesPerType = 10 } = {}) {
   console.log(`[URLS] Starting URL collection. maxPages=${maxPagesPerType}, sources=${LIST_URLS.length}`);
+  const urls = [];
 
-  // Use mock data instead of real scraping (ingatlan.com is blocking automated requests)
-  const mockUrls = getMockListingUrls();
-  console.log(`[URLS] Using mock data. Returning ${mockUrls.length} mock URLs.`);
-  
-  // Dedupe, then newest first by numeric id
-  const uniq = [...new Set(mockUrls)];
+  for (const baseUrl of LIST_URLS) {
+    console.log(`[URLS] Scraping ${baseUrl.substring(0, 50)}...`);
+    for (let page = 1; page <= maxPagesPerType; page++) {
+      const url = `${baseUrl}?page=${page}`;
+      try {
+        const html = await fetchText(url);
+        const $ = cheerioLoad(html);
+
+        // Parse listing links
+        $("a[href*='/']").each((_, el) => {
+          const href = $(el).attr("href");
+          if (!href) return;
+          const id = parseHirdetesId(href);
+          if (id) {
+            const absUrl = toAbsUrl(href);
+            if (!urls.includes(absUrl)) {
+              urls.push(absUrl);
+            }
+          }
+        });
+
+        console.log(`[URLS] Page ${page}: Found ${urls.length} URLs so far.`);
+
+        if (urls.length >= 500) {
+          console.log(`[URLS] Reached 500 URLs, stopping collection.`);
+          break;
+        }
+
+        await jitter(2000, 5000);
+      } catch (err) {
+        console.warn(`[URLS] Page ${page} failed: ${err.message}`);
+        if (page === 1) throw err; // Fail on first page, continue on others
+      }
+    }
+    if (urls.length >= 500) break;
+  }
+
+  // Dedupe and sort by ID (newest first)
+  const uniq = [...new Set(urls)];
   uniq.sort((a, b) => (parseHirdetesId(b) || 0) - (parseHirdetesId(a) || 0));
+  console.log(`[URLS] Collection complete. Total ${uniq.length} URLs collected.`);
   return uniq;
 }
 
@@ -297,48 +247,85 @@ function extractDistrict(locationText) {
 
 export async function scrapeListing(url) {
   const id = parseHirdetesId(url);
-  const mockData = getMockListing(id);
-  
-  if (!mockData) {
-    console.log(`[MOCK] No mock data for ${id}, using empty record`);
-    return { listing_id: id, source_url: url, title: "Unknown", raw_json: {} };
-  }
-  
-  console.log(`[MOCK] Returning mock listing ${id}`);
-  
+  if (!id) throw new Error(`Cannot extract ID from ${url}`);
+
+  console.log(`[SCRAPE] Fetching ${url}`);
+  const html = await fetchText(url);
+  const $ = cheerioLoad(html);
+
+  // Extract title
+  const title = clean($("h1").first().text() || $("title").text());
+
+  // Extract property map from dt/dd or labels
+  const props = getPropMap($);
+
+  // Extract JSON-LD for structured data
+  const jsonLd = extractJsonLd($) || {};
+
+  // Parse fields
+  const priceText = clean(
+    props["ár"] || props["ar"] || jsonLd.price || jsonLd.offers?.[0]?.price || ""
+  );
+  const price_ft = parsePriceFt(priceText);
+
+  const areaText = clean(props["terület"] || props["terulet"] || jsonLd.floorSize || "");
+  const area_m2 = maybeNumFromText(areaText);
+
+  const roomsText = clean(props["szobák"] || props["szobak"] || props["szoba"] || "");
+  const listingType = detectType(title, props);
+  const location = clean(props["település"] || props["telepules"] || props["hely"] || "");
+  const district = extractDistrict(location);
+
+  const conditionText = clean(props["állapot"] || props["allapot"] || "");
+  const build_year = maybeNumFromText(props["építés éve"] || props["epites eve"] || "");
+  const comfort = clean(props["komfort"] || "komfort");
+  const floor = clean(props["szint"] || props["szint/szintek"] || "");
+  const building_floors = maybeNumFromText(props["szintek száma"] || props["szintek szama"] || "");
+  const elevator = clean(props["lift"] || props["felvonó"] || props["felvonom"] || "");
+  const ceiling_height = clean(props["belmagasság"] || props["belmagassag"] || "");
+  const air_conditioning = clean(props["légkondicionálás"] || props["legkondicionalis"] || "");
+  const accessible = clean(props["akadálymentesített"] || props["akadalymentsitett"] || null);
+  const bath_wc = clean(props["fürdő, wc"] || props["furdo wc"] || "");
+  const orientation = clean(props["kitárulás"] || props["kitarulas"] || "");
+  const view_text = clean(props["kilátás"] || props["kilatas"] || "");
+  const balcony_m2 = maybeNumFromText(props["erkély"] || props["erkely"] || "");
+  const garden_contact = clean(props["kert"] || "");
+  const attic = clean(props["tetőtér"] || props["tetoster"] || "");
+  const parking = clean(props["parkolás"] || props["parkolas"] || "");
+  const parking_price_text = clean(props["parkolás ára"] || props["parkolas ara"] || "");
+
   const record = {
-    source_url: mockData.source_url || url,
-    listing_id: mockData.listing_id || id,
-    title: mockData.title,
-    listing_type: mockData.listing_type,
-    location_text: mockData.location_text,
-    district: mockData.district,
-    price_text: mockData.price_text,
-    price_ft: mockData.price_ft,
-    area_m2: mockData.area_m2,
-    lot_m2: mockData.lot_m2 || null,
-    rooms_text: mockData.rooms_text,
-    ad_category: mockData.ad_category,
-    condition_text: mockData.condition_text,
-    build_year: mockData.build_year,
-    comfort: mockData.comfort,
-    floor: mockData.floor,
-    building_floors: mockData.building_floors,
-    elevator: mockData.elevator,
-    ceiling_height: mockData.ceiling_height,
-    air_conditioning: mockData.air_conditioning,
-    accessible: mockData.accessible,
-    bath_wc: mockData.bath_wc,
-    orientation: mockData.orientation,
-    view_text: mockData.view_text,
-    balcony_m2: mockData.balcony_m2,
-    garden_contact: mockData.garden_contact,
-    attic: mockData.attic,
-    parking: mockData.parking,
-    parking_price_text: mockData.parking_price_text,
-    parking_price_ft: mockData.parking_price_ft,
+    source_url: url,
+    listing_id: id,
+    title,
+    listing_type: listingType,
+    location_text: location,
+    district,
+    price_text: priceText,
+    price_ft,
+    area_m2,
+    rooms_text: roomsText,
+    ad_category: clean($("meta[property='og:type']").attr("content") || ""),
+    condition_text: conditionText,
+    build_year,
+    comfort,
+    floor,
+    building_floors,
+    elevator,
+    ceiling_height,
+    air_conditioning,
+    accessible,
+    bath_wc,
+    orientation,
+    view_text,
+    balcony_m2,
+    garden_contact: garden_contact ? "igen" : null,
+    attic,
+    parking,
+    parking_price_text,
+    parking_price_ft: null,
     scraped_at: new Date().toISOString(),
-    raw_json: mockData.raw_json || {},
+    raw_json: jsonLd,
   };
 
   return record;
